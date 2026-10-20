@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsClient } from "@openhands/typescript-client/clients";
 import { I18nKey } from "#/i18n/declaration";
+import { buildAgentCanvasPath } from "#/utils/base-path";
 import { isSdkHttpStatusError } from "#/api/agent-server-compatibility";
 import { getAgentServerClientOptions } from "#/api/agent-server-client-options";
 import { isNoBackend } from "#/api/backend-registry/active-store";
@@ -27,7 +28,11 @@ import {
  * server-side validation (calls `GET /api/settings` before persisting)
  * and a connection status indicator.
  */
-export default function ApiKeyEntryScreen() {
+export default function ApiKeyEntryScreen({
+  oidcEnabled = false,
+}: {
+  oidcEnabled?: boolean;
+}) {
   const { t } = useTranslation("openhands");
   const { active, addBackend, updateBackend } = useActiveBackendContext();
 
@@ -99,6 +104,14 @@ export default function ApiKeyEntryScreen() {
         </div>
 
         <div className="px-6 pb-6 pt-2">
+          {oidcEnabled && (
+            <a
+              className="mb-4 flex w-full justify-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-base-hover"
+              href={`${buildAgentCanvasPath("/api/auth/oidc/login")}?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`}
+            >
+              {t(I18nKey.AUTH$SIGN_IN_WITH_IDENTITY_PROVIDER)}
+            </a>
+          )}
           <BackendForm
             mode="add"
             backend={{ ...active.backend, host, apiKey: "", name: "" }}

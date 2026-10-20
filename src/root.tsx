@@ -17,6 +17,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import {
   clearCachedAgentServerInfo,
+  getCachedAgentServerInfo,
   isAgentServerUnavailableError,
   isAgentServerAuthError,
 } from "#/api/agent-server-compatibility";
@@ -325,10 +326,12 @@ export default function App() {
   // collection; the onboarding steps issue their own backend-specific queries.
   const config = useConfig({
     enabled:
-      !authMissing &&
       !showFirstRunOnboarding &&
       !restoringMarsTunnel &&
       mainAppAuthAllowsBackendQueries,
+  });
+  const serverInfo = getCachedAgentServerInfo({
+    host: getEffectiveLocalBackend()?.host,
   });
   const activeCloudHealth = useBackendsHealth(
     active.backend.kind === "cloud" && mainAppAuthAllowsBackendQueries
@@ -382,10 +385,23 @@ export default function App() {
 
   // No key at all after onboarding was skipped/completed → auth screen.
   // Stale key → /server_info 401 → auth screen (public mode only).
-  if (authMissing || isAgentServerAuthError(config.error)) {
+  const oidcAuthenticated = Boolean(serverInfo?.oidc_authenticated);
+  const oidcLoginRequired = Boolean(
+    serverInfo?.oidc_enabled && !oidcAuthenticated,
+  );
+
+  if (authMissing && !oidcAuthenticated && config.isPending) {
+    return <AgentServerBootstrapLoading />;
+  }
+
+  if (
+    (authMissing && !oidcAuthenticated) ||
+    oidcLoginRequired ||
+    isAgentServerAuthError(config.error)
+  ) {
     return (
       <React.Suspense fallback={<AgentServerBootstrapLoading />}>
-        <ApiKeyEntryScreen />
+        <ApiKeyEntryScreen oidcEnabled={Boolean(serverInfo?.oidc_enabled)} />
       </React.Suspense>
     );
   }

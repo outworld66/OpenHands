@@ -34,6 +34,8 @@ export const INVALID_BACKEND_API_KEY_ERROR = "Invalid API key";
 
 export interface AgentServerInfo extends BaseServerInfo {
   sdk_version?: string;
+  oidc_enabled?: boolean;
+  oidc_authenticated?: boolean;
   runtime_services?: unknown;
   execution_runtime?: "local" | "docker";
 }
@@ -372,6 +374,9 @@ export async function loadAgentServerInfo() {
 
   assertAgentServerVersionIsSupported(serverInfo);
 
+  cachedAgentServerInfo = serverInfo;
+  cachedAgentServerInfoHost = clientOptions.host;
+
   // /server_info is unprotected, so a stale session key still gets 200.
   // In public mode, validate the key against a protected endpoint so a
   // server restart with a new LOCAL_BACKEND_API_KEY surfaces immediately
@@ -401,7 +406,5 @@ export async function loadAgentServerInfo() {
     }
   }
 
-  cachedAgentServerInfo = serverInfo;
-  cachedAgentServerInfoHost = clientOptions.host;
   return serverInfo;
 }
