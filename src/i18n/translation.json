@@ -953,6 +953,24 @@
     "ca": "Clau d'API no vàlida. Comproveu la clau i torneu-ho a provar.",
     "id": "Kunci API tidak valid. Silakan periksa kunci dan coba lagi."
   },
+  "AUTH$SIGN_IN_WITH_OIDC": {
+    "en": "Sign in with SSO",
+    "ja": "シングルサインオンでログイン",
+    "zh-CN": "使用单点登录",
+    "zh-TW": "使用單一登入",
+    "ko-KR": "SSO로 로그인",
+    "no": "Logg inn med SSO",
+    "it": "Accedi con SSO",
+    "pt": "Entrar com SSO",
+    "es": "Iniciar sesión con SSO",
+    "ar": "تسجيل الدخول باستخدام SSO",
+    "fr": "Se connecter avec SSO",
+    "tr": "SSO ile giriş yap",
+    "de": "Mit SSO anmelden",
+    "uk": "Увійти через SSO",
+    "ca": "Inicia la sessió amb SSO",
+    "id": "Masuk dengan SSO"
+  },
   "AUTH$CONNECTION_FAILED": {
     "en": "Connection failed",
     "ja": "接続に失敗しました",

@@ -250,8 +250,38 @@ export default function App() {
   // the cloud backend uses its own bearer token. Skip the API-key entry screen
   // in that case so Docker/public mode doesn't block cloud-only sessions.
   const isActiveCloudBackend = active.backend.kind === "cloud";
-  const authMissing =
+  const needsSessionAuth =
     bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
+  const oidcHost = active.backend.host || window.location.origin;
+  const agentServerOidcAuth = useQuery({
+    queryKey: [
+      ...QUERY_KEYS.AGENT_SERVER_OIDC_AUTH,
+      oidcHost,
+    ] as const,
+    queryFn: async () => {
+      try {
+        const response = await fetch(
+          new URL("/api/auth/oidc", oidcHost),
+          { credentials: "include" },
+        );
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          enabled?: boolean;
+          user?: unknown;
+        };
+      } catch {
+        return null;
+      }
+    },
+    enabled: needsSessionAuth,
+    retry: false,
+    staleTime: 0,
+    meta: { disableToast: true },
+  });
+  const oidcAuthenticated = Boolean(agentServerOidcAuth.data?.user);
+  const authMissing = needsSessionAuth && !oidcAuthenticated;
+  const waitingForAgentServerOidc =
+    needsSessionAuth && agentServerOidcAuth.isPending;
   const restoringMarsTunnel = useRestoreMarsTunnels();
   const queryClient = useQueryClient();
   // In locked-to-Cloud mode the only valid backend is a Cloud backend whose
@@ -374,6 +404,7 @@ export default function App() {
   if (
     waitingForMainAppAuth ||
     redirectingToMainAppLogin ||
+    waitingForAgentServerOidc ||
     restoringMarsTunnel ||
     (cookieSessionMaybeExpired && mainAppAuth.isFetching)
   ) {
@@ -385,7 +416,9 @@ export default function App() {
   if (authMissing || isAgentServerAuthError(config.error)) {
     return (
       <React.Suspense fallback={<AgentServerBootstrapLoading />}>
-        <ApiKeyEntryScreen />
+        <ApiKeyEntryScreen
+          oidcEnabled={agentServerOidcAuth.data?.enabled === true}
+        />
       </React.Suspense>
     );
   }

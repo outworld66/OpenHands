@@ -27,11 +27,19 @@ import {
  * server-side validation (calls `GET /api/settings` before persisting)
  * and a connection status indicator.
  */
-export default function ApiKeyEntryScreen() {
+export default function ApiKeyEntryScreen({
+  oidcEnabled = false,
+}: {
+  oidcEnabled?: boolean;
+}) {
   const { t } = useTranslation("openhands");
   const { active, addBackend, updateBackend } = useActiveBackendContext();
 
   const host = window.location.origin;
+
+  const handleOidcLogin = React.useCallback(() => {
+    window.location.assign(new URL("/api/auth/oidc/login", host));
+  }, [host]);
 
   const [isValidating, setIsValidating] = React.useState(false);
   const [connectionStatus, setConnectionStatus] = React.useState<
@@ -140,6 +148,16 @@ export default function ApiKeyEntryScreen() {
                     ? t(I18nKey.ONBOARDING$BACKEND_STATUS_CHECKING)
                     : t(I18nKey.BACKEND$CONNECT)}
                 </BrandButton>
+                {oidcEnabled && (
+                  <BrandButton
+                    type="button"
+                    variant="secondary"
+                    onClick={handleOidcLogin}
+                    className="w-full text-center"
+                  >
+                    {t(I18nKey.AUTH$SIGN_IN_WITH_OIDC)}
+                  </BrandButton>
+                )}
               </>
             )}
           />
