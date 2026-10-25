@@ -1,7 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LLMSubscriptionDeviceChallenge } from "#/api/llm-subscription-service";
+import LLMSubscriptionService from "#/api/llm-subscription-service";
 import { BrandButton } from "#/components/features/settings/brand-button";
 import { CopyToClipboardButton } from "#/components/shared/buttons/copy-to-clipboard-button";
 import {
@@ -33,6 +35,26 @@ export function OpenAISubscriptionAuthCard({
   isDisabled = false,
 }: OpenAISubscriptionAuthCardProps) {
   const { t } = useTranslation("openhands");
+  const queryClient = useQueryClient();
+  const oidcUser = useQuery({
+    queryKey: ["oidc-user-status"],
+    queryFn: LLMSubscriptionService.getOIDCUser,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isAdmin = Boolean(oidcUser.data?.isAdmin);
+  const grants = useQuery({
+    queryKey: ["openai-shared-grants"],
+    queryFn: LLMSubscriptionService.getOpenAISharedGrants,
+    enabled: isAdmin,
+    retry: false,
+  });
+  const updateGrant = useMutation({
+    mutationFn: ({ sub, enabled }: { sub: string; enabled: boolean }) =>
+      LLMSubscriptionService.setOpenAISharedGrant(sub, enabled),
+    onSuccess: (users) =>
+      queryClient.setQueryData(["openai-shared-grants"], users),
+  });
   const status = useOpenAISubscriptionStatus();
   const startLogin = useStartOpenAISubscriptionLogin();
   const pollLogin = usePollOpenAISubscriptionLogin();
@@ -41,6 +63,7 @@ export function OpenAISubscriptionAuthCard({
     React.useState<LLMSubscriptionDeviceChallenge | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [isPendingLogin, setIsPendingLogin] = React.useState(false);
+  const [grantSub, setGrantSub] = React.useState("");
   const pollTimeoutRef = React.useRef<number | null>(null);
 
   const clearPollTimeout = React.useCallback(() => {
@@ -194,6 +217,84 @@ export function OpenAISubscriptionAuthCard({
           </span>
         )}
       </div>
+
+      {oidcUser.data?.sub ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-tertiary-light">
+            {t(I18nKey.SETTINGS$SUBSCRIPTION_ACCOUNT_ID)}
+          </span>
+          <code className="break-all">{oidcUser.data.sub}</code>
+          <CopyToClipboardButton
+            isHidden={false}
+            isDisabled={false}
+            onClick={() => navigator.clipboard.writeText(oidcUser.data!.sub!)}
+            mode="copy"
+          />
+        </div>
+      ) : null}
+
+      {status.data?.sharedAvailable && !isAdmin ? (
+        <Typography.Paragraph className="text-tertiary-alt text-sm leading-5">
+          {t(I18nKey.SETTINGS$SUBSCRIPTION_SHARED_AVAILABLE)}
+        </Typography.Paragraph>
+      ) : null}
+
+      {isAdmin ? (
+        <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
+          <Typography.H3>
+            {t(I18nKey.SETTINGS$SUBSCRIPTION_SHARED_ACCESS)}
+          </Typography.H3>
+          <div className="flex flex-wrap gap-2">
+            <input
+              aria-label={t(I18nKey.SETTINGS$SUBSCRIPTION_ACCOUNT_ID)}
+              className="min-w-64 flex-1 rounded border border-border bg-surface-deep px-3 py-2 text-sm"
+              value={grantSub}
+              onChange={(event) => setGrantSub(event.target.value)}
+              placeholder={t(I18nKey.SETTINGS$SUBSCRIPTION_ACCOUNT_ID)}
+            />
+            <BrandButton
+              type="button"
+              variant="secondary"
+              isDisabled={!grantSub.trim() || updateGrant.isPending}
+              onClick={() => {
+                updateGrant.mutate(
+                  { sub: grantSub.trim(), enabled: true },
+                  {
+                    onSuccess: () => setGrantSub(""),
+                    onError: () => displayErrorToast(t(I18nKey.ERROR$GENERIC)),
+                  },
+                );
+              }}
+            >
+              {t(I18nKey.SETTINGS$SUBSCRIPTION_GRANT)}
+            </BrandButton>
+          </div>
+          {grants.data?.map((sub) => (
+            <div
+              key={sub}
+              className="flex items-center justify-between gap-3 text-sm"
+            >
+              <code className="break-all">{sub}</code>
+              <BrandButton
+                type="button"
+                variant="tertiary"
+                isDisabled={updateGrant.isPending}
+                onClick={() =>
+                  updateGrant.mutate(
+                    { sub, enabled: false },
+                    {
+                      onError: () =>
+                        displayErrorToast(t(I18nKey.ERROR$GENERIC)),
+                    },
+                  )
+                }
+              >
+                {t(I18nKey.SETTINGS$SUBSCRIPTION_REVOKE)}
+              </BrandButton>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {challenge ? (
         <div

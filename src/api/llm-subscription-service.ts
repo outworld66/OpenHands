@@ -17,6 +17,12 @@ export interface LLMSubscriptionStatus {
   connected: boolean;
   accountEmail: string | null;
   expiresAt: string | number | null;
+  sharedAvailable?: boolean;
+}
+
+export interface OIDCUserStatus {
+  sub: string | null;
+  isAdmin: boolean;
 }
 
 export interface LLMSubscriptionDeviceChallenge {
@@ -114,6 +120,7 @@ function normalizeStatus(raw: RawSubscriptionStatus): LLMSubscriptionStatus {
     expiresAt:
       readString(raw, ["expires_at", "expiresAt"]) ??
       readNumber(raw, ["expires_at", "expiresAt"]),
+    sharedAvailable: readBoolean(raw, ["shared_available", "sharedAvailable"]),
   };
 }
 
@@ -155,6 +162,42 @@ function normalizeDeviceChallenge(
 }
 
 class LLMSubscriptionService {
+  static async getOIDCUser(): Promise<OIDCUserStatus> {
+    const response = await requestSubscriptionEndpoint("/api/auth/oidc");
+    const raw = isRecord(response) ? response : {};
+    const user = isRecord(raw.user) ? raw.user : {};
+    return {
+      sub: readString(user, ["sub"]),
+      isAdmin: Array.isArray(raw.roles) && raw.roles.includes("admin"),
+    };
+  }
+
+  static async getOpenAISharedGrants(): Promise<string[]> {
+    const response = await requestSubscriptionEndpoint(
+      "/api/llm/subscription/openai/grants",
+    );
+    return isRecord(response) && Array.isArray(response.users)
+      ? response.users.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+  }
+
+  static async setOpenAISharedGrant(
+    sub: string,
+    enabled: boolean,
+  ): Promise<string[]> {
+    const response = await requestSubscriptionEndpoint(
+      "/api/llm/subscription/openai/grants",
+      { method: "POST", jsonBody: { sub, enabled } },
+    );
+    return isRecord(response) && Array.isArray(response.users)
+      ? response.users.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+  }
+
   static async getOpenAIModels(): Promise<string[]> {
     const response = await requestSubscriptionEndpoint(
       OPENAI_SUBSCRIPTION_MODELS_PATH,

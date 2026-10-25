@@ -436,7 +436,7 @@ export function LlmSettingsScreen({
               }
             }}
           />
-          <OpenAISubscriptionAuthCard isDisabled={isDisabled} />
+          <OpenAISubscriptionAuthCard />
         </div>
       );
 

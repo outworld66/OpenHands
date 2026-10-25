@@ -52576,5 +52576,20 @@
     "uk": "Немає активного профілю агента. Виберіть його в Налаштування → Агент.",
     "ca": "No hi ha cap perfil d'agent actiu. Trieu-ne un a Configuració → Agent.",
     "id": "Tidak ada profil agen yang aktif. Pilih satu di Pengaturan → Agen."
+  },
+  "SETTINGS$SUBSCRIPTION_ACCOUNT_ID": {
+    "en": "OIDC account ID"
+  },
+  "SETTINGS$SUBSCRIPTION_SHARED_AVAILABLE": {
+    "en": "An administrator has enabled the shared ChatGPT subscription. Your own subscription is used when connected; the shared subscription is used otherwise."
+  },
+  "SETTINGS$SUBSCRIPTION_SHARED_ACCESS": {
+    "en": "Shared subscription access"
+  },
+  "SETTINGS$SUBSCRIPTION_GRANT": {
+    "en": "Grant access"
+  },
+  "SETTINGS$SUBSCRIPTION_REVOKE": {
+    "en": "Revoke"
   }
 }
