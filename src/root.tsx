@@ -31,7 +31,13 @@ import {
   redirectToMainAppLogin,
   shouldUseMainAppCookieAuth,
 } from "#/api/main-app-auth";
-import { getEffectiveLocalBackend } from "#/api/backend-registry/active-store";
+import {
+  getActiveSelection,
+  getEffectiveLocalBackend,
+  getRegisteredBackends,
+  setActiveSelection,
+  setRegisteredBackends,
+} from "#/api/backend-registry/active-store";
 import { useActiveBackendContext } from "#/contexts/active-backend-context";
 import {
   isCloudBackendApiKeyOrNetworkHealthError,
@@ -254,16 +260,12 @@ export default function App() {
     bakedKeyMissing && !hasRegisteredKey && !isActiveCloudBackend;
   const oidcHost = active.backend.host || window.location.origin;
   const agentServerOidcAuth = useQuery({
-    queryKey: [
-      ...QUERY_KEYS.AGENT_SERVER_OIDC_AUTH,
-      oidcHost,
-    ] as const,
+    queryKey: [...QUERY_KEYS.AGENT_SERVER_OIDC_AUTH, oidcHost] as const,
     queryFn: async () => {
       try {
-        const response = await fetch(
-          new URL("/api/auth/oidc", oidcHost),
-          { credentials: "include" },
-        );
+        const response = await fetch(new URL("/api/auth/oidc", oidcHost), {
+          credentials: "include",
+        });
         if (!response.ok) return null;
         return (await response.json()) as {
           enabled?: boolean;
@@ -305,6 +307,30 @@ export default function App() {
   const { isCompleted: onboardingCompleted, markCompleted } =
     useOnboardingCompletion();
 
+  React.useEffect(() => {
+    if (!oidcAuthenticated) return;
+
+    const backends = getRegisteredBackends();
+    if (backends.length === 0) {
+      const backendId = "oidc-local";
+      setRegisteredBackends([
+        {
+          id: backendId,
+          name: "This Agent Server",
+          host: oidcHost,
+          apiKey: "",
+          kind: "local",
+        },
+      ]);
+      setActiveSelection({ backendId });
+    } else if (!getActiveSelection() && !getEffectiveLocalBackend()) {
+      const localBackend = backends.find((backend) => backend.kind === "local");
+      if (localBackend) setActiveSelection({ backendId: localBackend.id });
+    }
+
+    markCompleted();
+  }, [markCompleted, oidcAuthenticated, oidcHost]);
+
   // In locked-to-Cloud mode the `openhands-onboarded` localStorage flag is
   // not trustworthy: it may have been set during a previous non-locked
   // session on the same origin, and origin-scoped localStorage cannot tell
@@ -326,7 +352,7 @@ export default function App() {
     ? !shouldCheckMainAppAuth &&
       (!isActiveLockedCloudBackend ||
         (lockedCloudAuthMode !== "cookie" && !onboardingCompleted))
-    : !onboardingCompleted;
+    : !onboardingCompleted && !oidcAuthenticated;
   const mainAppAuth = useQuery({
     queryKey: QUERY_KEYS.MAIN_APP_COOKIE_AUTH,
     queryFn: authenticateWithMainAppCookie,
@@ -356,6 +382,7 @@ export default function App() {
   const config = useConfig({
     enabled:
       !authMissing &&
+      (!oidcAuthenticated || Boolean(getEffectiveLocalBackend())) &&
       !showFirstRunOnboarding &&
       !restoringMarsTunnel &&
       mainAppAuthAllowsBackendQueries,
