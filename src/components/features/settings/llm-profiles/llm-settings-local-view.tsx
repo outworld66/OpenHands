@@ -17,6 +17,7 @@ import { useActivateLlmProfile } from "#/hooks/mutation/use-activate-llm-profile
 import { useLlmProfiles } from "#/hooks/query/use-llm-profiles";
 import { useSettings } from "#/hooks/query/use-settings";
 import { useAgentSettingsSchema } from "#/hooks/query/use-agent-settings-schema";
+import { useOpenAISubscriptionModels } from "#/hooks/query/use-llm-subscription-models";
 import {
   useDefaultModel,
   useDefaultModelReady,
@@ -45,8 +46,10 @@ import {
 import {
   LLM_AUTH_TYPE_API_KEY,
   LLM_AUTH_TYPE_KEY,
+  LLM_AUTH_TYPE_SUBSCRIPTION,
   LLM_SUBSCRIPTION_VENDOR_KEY,
   OPENAI_SUBSCRIPTION_VENDOR,
+  resolveLlmAuthType,
 } from "#/constants/llm-subscription";
 import {
   buildSdkSettingsPayload,
@@ -164,6 +167,12 @@ export function LlmSettingsLocalView() {
   const [saveControl, setSaveControl] = useState<SdkSectionSaveControl | null>(
     null,
   );
+  const isSubscriptionAuth =
+    resolveLlmAuthType(saveControl?.values[LLM_AUTH_TYPE_KEY]) ===
+    LLM_AUTH_TYPE_SUBSCRIPTION;
+  const { data: subscriptionModels } = useOpenAISubscriptionModels({
+    enabled: backend.kind === "local" && isSubscriptionAuth,
+  });
   const automaticCreateBooleanKeys = useRef<Set<string> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -354,6 +363,7 @@ export function LlmSettingsLocalView() {
       view: saveControl.view,
       supportsConnections,
       isCloud: backend.kind === "cloud",
+      subscriptionModels,
     });
 
     const model = typeof llmConfig.model === "string" ? llmConfig.model : "";
@@ -435,6 +445,7 @@ export function LlmSettingsLocalView() {
     viewMode,
     editingProfile,
     backend.kind,
+    subscriptionModels,
     profilesData?.active_profile,
     saveProfile,
     activateProfile,
