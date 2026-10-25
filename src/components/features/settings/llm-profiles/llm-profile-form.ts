@@ -107,16 +107,11 @@ export function buildProfileLlmConfig({
     Object.prototype.hasOwnProperty.call(dirtyLlm, "model") &&
     dirtyLlm.model !== base.model;
   const llmConfig: Record<string, unknown> = { ...base, ...dirtyLlm };
-  // The embedded form reports dirty fields only. A new profile's model is
-  // prefilled from the default and usually never touched, so it is not
-  // dirty and there is no base config to inherit it from — yet it is
-  // exactly the model being saved. Without this the save failed with
-  // "Model is required" for anyone who kept the suggested model.
-  if (typeof llmConfig.model !== "string" || !llmConfig.model) {
-    const currentModel = values["llm.model"];
-    if (typeof currentModel === "string" && currentModel) {
-      llmConfig.model = currentModel;
-    }
+  // The model control is rendered outside the schema fields, so dirty-only
+  // payloads can omit a model change. The form value is the source of truth.
+  const currentModel = values["llm.model"];
+  if (typeof currentModel === "string" && currentModel) {
+    llmConfig.model = currentModel;
   }
   const authType = resolveLlmAuthType(llmConfig.auth_type);
 
