@@ -27,6 +27,7 @@ import { pathToFileURL } from "node:url";
 
 import { DEFAULT_BIND_HOST, resolveBindHost } from "./bind-host.mjs";
 import { mountMarsWebBridge } from "./mars-web-bridge.mjs";
+import { createOidcSessionAuthorizer } from "./oidc-session-auth.mjs";
 import {
   createProxyHandlers,
   createRouter,
@@ -49,6 +50,8 @@ function parseArgs() {
     defaultBackend: null,
     noReferrerPrefixes: [],
     runtimeServicesInfo: null,
+    oidcStatusUrl: null,
+    sessionApiKey: null,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -164,6 +167,8 @@ function buildConfig(args, env = process.env) {
     noReferrerPrefixes: args.noReferrerPrefixes ?? [],
     runtimeServicesInfo:
       args.runtimeServicesInfo || env.INGRESS_RUNTIME_SERVICES_INFO || null,
+    oidcStatusUrl: env.CANVAS_OIDC_STATUS_URL || null,
+    sessionApiKey: env.CANVAS_INTERNAL_SESSION_API_KEY || null,
   };
 }
 
@@ -173,6 +178,7 @@ function buildConfig(args, env = process.env) {
 
 export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
+  const authorizeOidc = createOidcSessionAuthorizer(config.oidcStatusUrl);
   const proxy = createProxyHandlers({
     label: `ingress:${config.port}`,
     xfwd: false,
@@ -181,39 +187,70 @@ export function startIngress(config) {
   const uninstallDiagnostics = proxy.installDiagnostics();
   // DigitalOcean Managed Agents for the browser: this server hosts the MARS
   // bridge and proxies to sessions' tunnel listeners, behind the session key
-  // (MARS_WEB_KEY; dev-with-automation passes the stack's key).
-  const marsWeb = mountMarsWebBridge({ host: config.host });
+  // or a verified Agent Server OIDC session.
+  const marsWeb = mountMarsWebBridge({
+    host: config.host,
+    authorizeOidc,
+  });
 
   const noReferrerPrefixes = config.noReferrerPrefixes ?? [];
 
   const server = createServer((req, res) => {
-    const url = req.url ?? "/";
-    if (marsWeb?.handleHttp(req, res)) return;
-    const backend = route(url);
+    void (async () => {
+      const url = req.url ?? "/";
+      if (marsWeb?.handleHttp(req, res)) return;
+      const backend = route(url);
 
-    if (!backend) {
-      res.writeHead(503);
-      res.end("No backend configured for this route");
-      return;
-    }
+      if (!backend) {
+        res.writeHead(503);
+        res.end("No backend configured for this route");
+        return;
+      }
 
-    // See the matching note in static-server.mjs: the editor's URL carries
-    // agent-server's session key as a query parameter, so the document must
-    // not send a Referer on the subresources the workbench loads.
-    if (noReferrerPrefixes.some((prefix) => matchesPathPrefix(url, prefix))) {
-      res.setHeader("Referrer-Policy", "no-referrer");
-    }
+      // See the matching note in static-server.mjs: the editor's URL carries
+      // agent-server's session key as a query parameter, so the document must
+      // not send a Referer on the subresources the workbench loads.
+      if (noReferrerPrefixes.some((prefix) => matchesPathPrefix(url, prefix))) {
+        res.setHeader("Referrer-Policy", "no-referrer");
+      }
 
-    if (
-      config.runtimeServicesInfo &&
-      isServerInfoRequest(req) &&
-      (req.method === "GET" || req.method === "HEAD")
-    ) {
-      proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
-      return;
-    }
+      if (
+        config.runtimeServicesInfo &&
+        isServerInfoRequest(req) &&
+        (req.method === "GET" || req.method === "HEAD")
+      ) {
+        proxyServerInfoRequest(req, res, backend, config.runtimeServicesInfo);
+        return;
+      }
 
-    proxy.proxyHttp(req, res, backend);
+      if (
+        matchesPathPrefix(url, "/api/automation") &&
+        authorizeOidc &&
+        !req.headers["x-session-api-key"]
+      ) {
+        if (!(await authorizeOidc(req))) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ detail: "OIDC session required" }));
+          return;
+        }
+        proxy.proxyHttp(req, res, backend, {
+          headers: { "X-Session-API-Key": config.sessionApiKey },
+        });
+        return;
+      }
+
+      proxy.proxyHttp(req, res, backend);
+    })().catch((error) => {
+      console.error(
+        `[ingress:${config.port}] Request failed: ${error.message}`,
+      );
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ detail: "Ingress request failed" }));
+      } else {
+        res.destroy();
+      }
+    });
   });
 
   // Handle WebSocket upgrades

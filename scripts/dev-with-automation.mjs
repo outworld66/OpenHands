@@ -1182,9 +1182,17 @@ export function buildMarsWebEnv(role, config) {
   if (role === "static" || config.marsWebBridge === false) {
     return { MARS_WEB: "0" };
   }
-  return config.sessionApiKey
-    ? { MARS_WEB_KEY: config.sessionApiKey }
-    : { MARS_WEB: "0" };
+  if (!config.sessionApiKey) return { MARS_WEB: "0" };
+
+  return {
+    MARS_WEB_KEY: config.sessionApiKey,
+    ...(process.env.OH_OIDC_ISSUER_URL
+      ? {
+          CANVAS_OIDC_STATUS_URL: `${getAgentServerBaseUrl(config)}/api/auth/oidc`,
+          CANVAS_INTERNAL_SESSION_API_KEY: config.sessionApiKey,
+        }
+      : {}),
+  };
 }
 
 function startIngress(config) {

@@ -134,6 +134,7 @@ export function mountMarsWebBridge({
   env = process.env,
   host = DEFAULT_BIND_HOST,
   sessionApiKey = null,
+  authorizeOidc = null,
   log = (message) => console.warn(`[mars-web] ${message}`),
   debug = (message) => console.debug(`[mars-web] ${message}`),
 } = {}) {
@@ -147,7 +148,7 @@ export function mountMarsWebBridge({
     return null;
   }
   if (!key) debug("no key configured; /mars/* is open to local callers only");
-  return createMarsWebBridge({ env, host, key });
+  return createMarsWebBridge({ env, host, key, authorizeOidc });
 }
 
 const MARS_WEB_OFF = new Set(["0", "false", "off", "no"]);
@@ -323,6 +324,7 @@ function toUpstreamRequest(req, path) {
  * @param {Record<string, string | undefined>} [options.env]
  * @param {string} [options.host] The server's bind host; loopback gets the Host check
  * @param {string | null} [options.key] Session key every request must present; null = open (loopback dev only — see mountMarsWebBridge)
+ * @param {(req: import("node:http").IncomingMessage) => Promise<boolean> | null} [options.authorizeOidc]
  * @param {(message: string, error?: unknown) => void} [options.log]
  */
 export function createMarsWebBridge({
@@ -330,6 +332,7 @@ export function createMarsWebBridge({
   env = process.env,
   host = DEFAULT_BIND_HOST,
   key = null,
+  authorizeOidc = null,
   log = (message, error) => console.warn(`[mars-web] ${message}`, error ?? ""),
 } = {}) {
   // No userDataPath: credentials stay in this process's memory.
@@ -363,16 +366,17 @@ export function createMarsWebBridge({
   const cookieToken = randomBytes(32).toString("hex");
 
   /**
-   * Whether the request may use the bridge. With no key configured every
-   * same-host request may. Otherwise it must carry the key (HTTP) or the
-   * cookie a keyed request earned (HTTP or WebSocket upgrade). Returns
-   * `"issue"` when the key was presented so the response can set the cookie.
+   * OIDC sessions are checked against Agent Server on every request; without
+   * OIDC, the existing key/header and bridge-cookie flow remains in use.
    */
-  function authorize(req) {
+  async function authorize(req) {
     if (!key) return "ok";
     const presented = req.headers[AUTH_HEADER];
     if (typeof presented === "string" && safeEqual(presented, key)) {
       return "issue";
+    }
+    if (authorizeOidc) {
+      return (await authorizeOidc(req)) ? "ok" : "deny";
     }
     const cookie = readCookie(req, AUTH_COOKIE);
     if (cookie && safeEqual(cookie, cookieToken)) return "ok";
@@ -503,29 +507,42 @@ export function createMarsWebBridge({
         writeJson(res, 200, { ok: true, authRequired: key !== null });
         return true;
       }
-      const auth = authorize(req);
-      if (auth === "deny") {
-        writeJson(res, 401, { error: { message: "session key required" } });
-        return true;
-      }
-      if (auth === "issue") res.setHeader("Set-Cookie", cookieHeader());
-      if (pathOnly.startsWith(RPC_PREFIX)) {
-        void handleRpc(req, res, pathOnly.slice(RPC_PREFIX.length));
-        return true;
-      }
-      let session;
-      try {
-        session = parseSessionPath(url);
-      } catch (error) {
-        if (!(error instanceof BadSessionPath)) throw error;
-        writeJson(res, 400, { error: { message: error.message } });
-        return true;
-      }
-      if (session) {
-        proxyHttp(req, res, session);
-        return true;
-      }
-      writeJson(res, 404, { error: { message: "not found" } });
+      void (async () => {
+        const auth = await authorize(req);
+        if (auth === "deny") {
+          writeJson(res, 401, {
+            error: { message: "session key or OIDC session required" },
+          });
+          return;
+        }
+        if (auth === "issue") res.setHeader("Set-Cookie", cookieHeader());
+        if (pathOnly.startsWith(RPC_PREFIX)) {
+          await handleRpc(req, res, pathOnly.slice(RPC_PREFIX.length));
+          return;
+        }
+        let session;
+        try {
+          session = parseSessionPath(url);
+        } catch (error) {
+          if (!(error instanceof BadSessionPath)) throw error;
+          writeJson(res, 400, { error: { message: error.message } });
+          return;
+        }
+        if (session) {
+          proxyHttp(req, res, session);
+          return;
+        }
+        writeJson(res, 404, { error: { message: "not found" } });
+      })().catch((error) => {
+        log("request authorization failed", error);
+        if (!res.headersSent) {
+          writeJson(res, 503, {
+            error: { message: "authorization unavailable" },
+          });
+        } else {
+          res.destroy();
+        }
+      });
       return true;
     },
 
@@ -537,23 +554,28 @@ export function createMarsWebBridge({
         socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
         return true;
       }
-      if (authorize(req) === "deny") {
-        socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        return true;
-      }
-      let session;
-      try {
-        session = parseSessionPath(url);
-      } catch (error) {
-        if (!(error instanceof BadSessionPath)) throw error;
-        socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
-        return true;
-      }
-      if (!session) {
-        socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
-        return true;
-      }
-      proxyWebSocket(req, socket, head, session);
+      void (async () => {
+        if ((await authorize(req)) === "deny") {
+          socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          return;
+        }
+        let session;
+        try {
+          session = parseSessionPath(url);
+        } catch (error) {
+          if (!(error instanceof BadSessionPath)) throw error;
+          socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+          return;
+        }
+        if (!session) {
+          socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
+          return;
+        }
+        proxyWebSocket(req, socket, head, session);
+      })().catch((error) => {
+        log("WebSocket authorization failed", error);
+        socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+      });
       return true;
     },
 
