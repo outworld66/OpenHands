@@ -48,6 +48,15 @@ export function profileConfigToFormValues(
       (config.subscription_vendor as string) ?? OPENAI_SUBSCRIPTION_VENDOR;
   }
 
+  if (
+    resolveLlmAuthType(values[LLM_AUTH_TYPE_KEY]) ===
+      LLM_AUTH_TYPE_SUBSCRIPTION &&
+    typeof values["llm.model"] === "string" &&
+    values["llm.model"].startsWith("openai/")
+  ) {
+    values["llm.model"] = values["llm.model"].slice("openai/".length);
+  }
+
   // Seed the provider-connection link explicitly (it is excluded from the
   // schema-driven inputs), so an unchanged profile keeps its connection.
   values[LLM_PROVIDER_CONNECTION_KEY] =
