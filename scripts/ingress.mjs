@@ -173,7 +173,11 @@ function buildConfig(args, env = process.env) {
 
 export function startIngress(config) {
   const route = createRouter(config.routes, config.defaultBackend);
-  const proxy = createProxyHandlers({ label: `ingress:${config.port}` });
+  const proxy = createProxyHandlers({
+    label: `ingress:${config.port}`,
+    xfwd: false,
+    changeOrigin: false,
+  });
   const uninstallDiagnostics = proxy.installDiagnostics();
   // DigitalOcean Managed Agents for the browser: this server hosts the MARS
   // bridge and proxies to sessions' tunnel listeners, behind the session key

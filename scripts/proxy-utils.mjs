@@ -278,6 +278,7 @@ function writeProxyError(res, message, errorBody) {
  * @param {number} [options.timeout] Client socket idle timeout in ms; 0 = none
  * @param {number} [options.proxyTimeout] Upstream response timeout in ms; 0 = none
  * @param {boolean} [options.xfwd] Add X-Forwarded-* headers upstream
+ * @param {boolean} [options.changeOrigin] Rewrite the upstream Host header
  * @param {(message: string) => { contentType: string, body: string }} [options.errorBody]
  *   The 502 written when the upstream fails before a response started
  * @param {(proxySocket: import("node:net").Socket) => void} [options.onProxySocket]
@@ -288,12 +289,13 @@ export function createProxyHandlers({
   timeout = DEFAULT_PROXY_TIMEOUT_MS,
   proxyTimeout = DEFAULT_PROXY_TIMEOUT_MS,
   xfwd = true,
+  changeOrigin = true,
   errorBody = textErrorBody,
   onProxySocket,
 } = {}) {
   const proxy = createProxyServer({
     ws: true,
-    changeOrigin: true,
+    changeOrigin,
     xfwd,
     timeout,
     proxyTimeout,
