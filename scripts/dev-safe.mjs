@@ -418,6 +418,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
  *   edits are picked up without a manual reinstall. The agent-server itself
  *   is rebuilt from local source on each invocation (--reinstall).
  * - OH_AGENT_SERVER_GIT_REF: Git commit SHA or branch name
+ * - OH_AGENT_SERVER_GIT_REPO: Git repository URL (defaults to upstream)
  * - OH_AGENT_SERVER_VERSION: Specific PyPI version (e.g., "1.56.0")
  *
  * If none are set, defaults to the released version specified by
@@ -430,6 +431,7 @@ export const AGENT_SERVER_IMPORT_MODULES = "canvas_ui_tool";
 export function buildAgentServerCommand(env = process.env) {
   const localPath = env.OH_AGENT_SERVER_LOCAL_PATH;
   const gitRef = env.OH_AGENT_SERVER_GIT_REF;
+  const gitRepo = env.OH_AGENT_SERVER_GIT_REPO || AGENT_SERVER_GIT_REPO;
   const version = env.OH_AGENT_SERVER_VERSION;
 
   const uvxArgs = [];
@@ -466,7 +468,7 @@ export function buildAgentServerCommand(env = process.env) {
     // string as the current PyPI release (e.g. both "1.26.0"). Without it, uv
     // silently reuses the cached PyPI wheels and the git ref is never actually
     // used, even though it was explicitly requested.
-    const baseGitUrl = `git+${AGENT_SERVER_GIT_REPO}@${gitRef}`;
+    const baseGitUrl = `git+${gitRepo}@${gitRef}`;
     uvxArgs.push(
       "--reinstall",
       "--from",

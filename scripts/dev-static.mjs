@@ -33,6 +33,7 @@
  *   - PORT: Ingress port (default: 8000)
  *   - OH_AUTOMATION_GIT_REF: Git ref for automation (default: main)
  *   - OH_AGENT_SERVER_GIT_REF: Git ref for agent-server
+ *   - OH_AGENT_SERVER_GIT_REPO: Git repository for agent-server
  *   - OH_SECRET_KEY: Session secret key
  */
 
@@ -178,6 +179,7 @@ ENVIRONMENT VARIABLES:
   PORT                        Alternative to --port
   OH_AUTOMATION_GIT_REF       Alternative to --automation-ref
   OH_AGENT_SERVER_GIT_REF     Git ref for agent-server SDK
+  OH_AGENT_SERVER_GIT_REPO    Git repository for agent-server SDK
   OH_SECRET_KEY               Secret key for sessions
 
 ACCESS POINTS:
