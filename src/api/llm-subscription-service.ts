@@ -18,6 +18,8 @@ export interface LLMSubscriptionStatus {
   accountEmail: string | null;
   expiresAt: string | number | null;
   sharedAvailable?: boolean;
+  credentialSource?: "personal" | "shared";
+  sharedConnected?: boolean;
 }
 
 export interface OIDCUserStatus {
@@ -121,6 +123,11 @@ function normalizeStatus(raw: RawSubscriptionStatus): LLMSubscriptionStatus {
       readString(raw, ["expires_at", "expiresAt"]) ??
       readNumber(raw, ["expires_at", "expiresAt"]),
     sharedAvailable: readBoolean(raw, ["shared_available", "sharedAvailable"]),
+    credentialSource:
+      readString(raw, ["credential_source", "credentialSource"]) === "shared"
+        ? "shared"
+        : "personal",
+    sharedConnected: readBoolean(raw, ["shared_connected", "sharedConnected"]),
   };
 }
 
@@ -196,6 +203,15 @@ class LLMSubscriptionService {
           (item): item is string => typeof item === "string",
         )
       : [];
+  }
+
+  static async setOpenAICredentialSource(
+    source: "personal" | "shared",
+  ): Promise<void> {
+    await requestSubscriptionEndpoint("/api/llm/subscription/openai/source", {
+      method: "POST",
+      jsonBody: { source },
+    });
   }
 
   static async getOpenAIModels(): Promise<string[]> {

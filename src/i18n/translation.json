@@ -52591,5 +52591,11 @@
   },
   "SETTINGS$SUBSCRIPTION_REVOKE": {
     "en": "Revoke"
+  },
+  "SETTINGS$SUBSCRIPTION_USE_PERSONAL": {
+    "en": "Use my subscription"
+  },
+  "SETTINGS$SUBSCRIPTION_USE_SHARED": {
+    "en": "Use shared subscription"
   }
 }

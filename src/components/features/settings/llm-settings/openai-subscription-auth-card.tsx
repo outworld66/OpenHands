@@ -12,6 +12,7 @@ import {
   useStartOpenAISubscriptionLogin,
 } from "#/hooks/mutation/use-llm-subscription-auth";
 import { useOpenAISubscriptionStatus } from "#/hooks/query/use-llm-subscription-status";
+import { LLM_SUBSCRIPTION_QUERY_KEYS } from "#/hooks/query/query-keys";
 import { I18nKey } from "#/i18n/declaration";
 import { Typography } from "#/ui/typography";
 import {
@@ -55,6 +56,14 @@ export function OpenAISubscriptionAuthCard({
     onSuccess: (users) =>
       queryClient.setQueryData(["openai-shared-grants"], users),
   });
+  const updateSource = useMutation({
+    mutationFn: LLMSubscriptionService.setOpenAICredentialSource,
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: LLM_SUBSCRIPTION_QUERY_KEYS.openaiStatus,
+      }),
+    onError: () => displayErrorToast(t(I18nKey.ERROR$GENERIC)),
+  });
   const status = useOpenAISubscriptionStatus();
   const startLogin = useStartOpenAISubscriptionLogin();
   const pollLogin = usePollOpenAISubscriptionLogin();
@@ -81,8 +90,15 @@ export function OpenAISubscriptionAuthCard({
   };
 
   const isBusy =
-    startLogin.isPending || pollLogin.isPending || logout.isPending;
+    startLogin.isPending ||
+    pollLogin.isPending ||
+    logout.isPending ||
+    updateSource.isPending;
   const connected = Boolean(status.data?.connected);
+  const activeCredentialConnected =
+    status.data?.credentialSource === "shared"
+      ? Boolean(status.data.sharedConnected)
+      : connected;
 
   const pollDeviceLogin = React.useCallback(
     async (deviceCode: string) => {
@@ -198,12 +214,13 @@ export function OpenAISubscriptionAuthCard({
           <span className="text-danger">
             {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_UNAVAILABLE)}
           </span>
-        ) : connected ? (
+        ) : activeCredentialConnected ? (
           <>
             <span className="text-success">
               {t(I18nKey.SETTINGS$SUBSCRIPTION_STATUS_CONNECTED)}
             </span>
-            {status.data?.accountEmail ? (
+            {status.data?.accountEmail &&
+            (isAdmin || status.data.credentialSource !== "shared") ? (
               <span className="text-tertiary-light">
                 {t(I18nKey.SETTINGS$SUBSCRIPTION_ACCOUNT, {
                   account: status.data.accountEmail,
@@ -234,9 +251,37 @@ export function OpenAISubscriptionAuthCard({
       ) : null}
 
       {status.data?.sharedAvailable && !isAdmin ? (
-        <Typography.Paragraph className="text-tertiary-alt text-sm leading-5">
-          {t(I18nKey.SETTINGS$SUBSCRIPTION_SHARED_AVAILABLE)}
-        </Typography.Paragraph>
+        <div className="flex flex-col gap-2">
+          <Typography.Paragraph className="text-tertiary-alt text-sm leading-5">
+            {t(I18nKey.SETTINGS$SUBSCRIPTION_SHARED_AVAILABLE)}
+          </Typography.Paragraph>
+          <div className="flex flex-wrap gap-2">
+            <BrandButton
+              type="button"
+              variant={
+                status.data.credentialSource === "personal"
+                  ? "primary"
+                  : "secondary"
+              }
+              isDisabled={updateSource.isPending}
+              onClick={() => updateSource.mutate("personal")}
+            >
+              {t(I18nKey.SETTINGS$SUBSCRIPTION_USE_PERSONAL)}
+            </BrandButton>
+            <BrandButton
+              type="button"
+              variant={
+                status.data.credentialSource === "shared"
+                  ? "primary"
+                  : "secondary"
+              }
+              isDisabled={updateSource.isPending}
+              onClick={() => updateSource.mutate("shared")}
+            >
+              {t(I18nKey.SETTINGS$SUBSCRIPTION_USE_SHARED)}
+            </BrandButton>
+          </div>
+        </div>
       ) : null}
 
       {isAdmin ? (
